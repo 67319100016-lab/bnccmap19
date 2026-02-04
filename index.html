@@ -490,10 +490,10 @@ function findRoute(){
 }
 /*พิกัดมุมแมพ*/
 const MAP_BOUNDS = {
-  latMin: 13.675100,   // ขอบล่าง (ใต้สุด)
-  latMax: 13.677900,   // ขอบบน (เหนือสุด)
-  lngMin: 100.615000,  // ขอบซ้าย (ตะวันตก)
-  lngMax: 100.617400   // ขอบขวา (ตะวันออก)
+  latMax: 13.677688,   // บนสุด
+  latMin: 13.674667,   // ล่างสุด
+  lngMin: 100.613911,  // ซ้ายสุด
+  lngMax: 100.617127   // ขวาสุด
 };
 
 function isInsideMap(lat, lng) {
@@ -525,20 +525,29 @@ function locateMe(){
       }
 
       // จุดอ้างอิง (ใช้ตึก 1)
-      const refLat = buildings[1].lat;
-      const refLng = buildings[1].lng;
-      const refX = buildings[1].x;
-      const refY = buildings[1].y;
+      
 
-      const gpsScale = 100000;
+      function gpsToMap(lat, lng) {
+  const mapWidth = 1000;
+  const mapHeight = 800;
 
-      const x = refX + (lng - refLng) * gpsScale;
-      const y = refY - (lat - refLat) * gpsScale;
+  const x = ((lng - MAP_BOUNDS.lngMin) /
+            (MAP_BOUNDS.lngMax - MAP_BOUNDS.lngMin)) * mapWidth;
 
-      userMarker.setAttribute("cx",x);
-      userMarker.setAttribute("cy",y);
-      userPulse.setAttribute("cx",x);
-      userPulse.setAttribute("cy",y);
+  const y = ((MAP_BOUNDS.latMax - lat) /
+            (MAP_BOUNDS.latMax - MAP_BOUNDS.latMin)) * mapHeight;
+
+  return { x, y };
+}
+
+
+      const { x, y } = gpsToMap(lat, lng);
+
+      userMarker.setAttribute("cx", x);
+      userMarker.setAttribute("cy", y);
+      userPulse.setAttribute("cx", x);
+      userPulse.setAttribute("cy", y);
+
 
       userMarker.style.display = "block";
       userPulse.style.display = "block";
@@ -674,18 +683,13 @@ function toggleNight(){
 }
 /*ซุมตอนกดgps*/
 function zoomToUser(x, y, zoom = 2) {
-  const svg = document.getElementById("mapSvg");
-  const vb = svg.viewBox.baseVal;
-
-  const newWidth = vb.width / zoom;
-  const newHeight = vb.height / zoom;
-
-  vb.x = x - newWidth / 2;
-  vb.y = y - newHeight / 2;
-  vb.width = newWidth;
-  vb.height = newHeight;
+  const svg = document.getElementById("map");
+  svg.setAttribute(
+    "viewBox",
+    `${x - 500/zoom} ${y - 400/zoom} ${1000/zoom} ${800/zoom}`
+  );
 }
-zoomToUser(mapX, mapY, 2.5);
+
 
 </script>
 
