@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>แผนที่พณิชยการบางนา </title>
+
+
+<style>
+:root{
+  --bg:#f7f9fc;
+  --panel:#ffffff;
+  --primary:#4dabf7;
+  --road:#4e4e4e;
+  --learn:#b7e4c7;
+  --important:#90dbf4;
+  --sport:#74c69d;
+}
+/*หน้าจอผู้ใช้งาน****/
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  background:var(--bg);
+  display: flow-root;
+  height:100vh;
+}
+
+/* Sidebar */
+#sidebar{
+  width:320px;
+  background:var(--panel);
+  box-shadow:2px 0 12px rgba(0,0,0,.1);
+  padding:16px;
+}
+#sidebar h2{margin-top:0}
+input,select,button{
+  width:100%;
+  padding:8px 10px;
+  margin-bottom:8px;
+  border-radius:8px;
+  border:1px solid #0e0d0d;
+}
+button{
+  background: linear-gradient(135deg,#6dbdff,#6de2ff);
+  box-shadow: 0 4px 10px rgba(0,0,0,.4);
+}
+button:hover{opacity:.9}
+#info{
+  margin-top:8px;
+  padding:10px;
+  background:#f1f5f9;
+  border-radius:8px;
+  font-size:14px;
+}
+
+/* Map */
+#map-wrap{flex:1; overflow:hidden;}
+svg{
+  background:#eef2f7;
+  cursor:grab;
+}
+.road{fill:var(--road)}
+
+.learn{fill:var(--learn)}
+.important{fill:var(--important)}
+.sport{fill:var(--sport)}
+.highlight{stroke:#ff595e; stroke-width:3}
+
+/*ชื่ออาคาร*/
+.label{
+  font-size:14px;
+  text-anchor:middle;
+  pointer-events:none;
+  fill:#020202;
+  font-weight:700;
+}
+
+/* Route */
+#route{
+  stroke:#ff0000;
+  stroke-width:6;
+  fill:none;
+  stroke-linecap:round;
+  stroke-dasharray:12 8;
+  animation: dash 1s linear infinite;
+  filter: drop-shadow(0 0 8px #ff0000);
+}
+
+@keyframes dash{
+  to{stroke-dashoffset:-20}
+}
+
+
+/*ไอคอนเมาส์ไปโดนตึก*/
+.building{
+  stroke:#2f3e46;
+  stroke-width:1.2;
+  rx:10; ry:10;
+  cursor:pointer;
+  transition:.2s;
+  filter: drop-shadow(2px 3px 3px rgba(0,0,0,.15));
+}
+.building:hover{
+  transform:translateY(-2px);
+  filter: drop-shadow(0 0 15px rgb(255, 0, 0));
+}
+/* อาคารถูกเลือก */
+.building.selected{
+  stroke:#f3615c;
+  stroke-width:4;
+  filter:
+    drop-shadow(0 0 12px #ee6868)
+    drop-shadow(0 0 25px rgba(255, 104, 104, 0.8));
+  animation: selectPulse .8s ease;
+}
+
+/* อาคารอื่น */
+.building.dim{
+  opacity:0.3;
+}
+
+/* เด้งเบา ๆ */
+@keyframes selectPulse{
+  0%{transform:scale(1)}
+  50%{transform:scale(1.08)}
+  100%{transform:scale(1)}
+}
+
+.ripple{
+  fill:none;
+  stroke:#f53100;
+  stroke-width:3;
+  opacity:0.8;
+  pointer-events:none;
+  animation:ripple .8s ease-out forwards;
+}
+
+@keyframes ripple{
+  from{r:0; opacity:1}
+  to{r:45; opacity:0}
+}
+
+/* Night Mode */
+
+
+:root{
+  --bg:#eaf6f0;
+  --panel:#ffffff;
+  --building:#e9ecef;
+  --text:#212529;
+  
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+}
+
+body.night{
+  --bg:#0f172a;
+  --panel:#020617;
+  --road:#475569;
+  --building:#1e293b;
+  --text:#e5e7eb;
+  
+}
+.content {
+  color: #020202;
+}
+/*ซุมgps*/
+#mapSvg {
+  transition: all 0.6s ease-in-out;
+}
+
+/*-----------------------------------------------------ตกแต่งข้างบน------------------------------------------------------*/
+</style>
+</head>
+
+<body>
+
+<div id="sidebar">
+  <h2>แผนที่สถานศึกษา</h2>
+
+  <input id="search" placeholder="ค้นหาชื่ออาคาร">
+  <select id="from"></select>
+  <select id="to"></select>
+  <button onclick="findRoute()">🧭 แนะนำเส้นทาง</button>
+  <button onclick="locateMe()">📍 ตำแหน่งของฉัน</button>
+<hr>
+<button onclick="toggleNight()">🌙 / 🌞</button>
+
+<h3>📚 ข้อมูลอาคาร</h3>
+
+<select id="buildingSelect" onchange="updateFloors()">
+  <option value="">เลือกอาคาร</option>
+</select>
+
+<select id="floorSelect" onchange="showRooms()">
+  <option value="">เลือกชั้น</option>
+</select>
+
+<div id="roomList"></div>
+<div class="content">
+  <div id="info">คลิกอาคารบนแผนที่</div>
+</div>
+</div>
+<div id="map-wrap">
+<svg id="map" width="1000" height="800">
+
+  
+<defs>
+  <linearGradient id="grassGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#dff2df"/>
+    <stop offset="100%" stop-color="#cbe8cb"/>
+  </linearGradient>
+</defs>
+
+<rect x="0" y="0" width="100%" height="100%"
+      fill="url(#grassGrad)" rx="30"/>
+<!-- จุดกระพริบผู้ใช้งาน -->
+      
+  <animate attributeName="r" from="12" to="28" dur="1.2s" repeatCount="indefinite"/>
+
+
+<!-- ต้นไม้ในเกม -->
+<g class="tree">
+  <circle cx="150" cy="150" r="18" fill="#2d6a4f"/>
+  <rect x="145" y="165" width="10" height="15" fill="#6c584c"/>
+</g>
+
+<!-- ถนนแนวนอน -->
+ <g class="road">
+  <rect x="120" y="360" width="360" height="30" rx="10" fill="#b0b7bd"/>
+<!-- เส้นปะกลางถนน บวกเพิ่มอีก 20-->
+  <line x1="140" y1="375" x2="430" y2="375"
+        stroke="#fff"
+        stroke-width="3"
+        stroke-dasharray="12,12"/>
+</g>
+
+ <g class="road">
+  <rect x="0" y="550" width="450" height="40" rx="10" fill="#b0b7bd"/>
+<!-- อุดมสุข-->
+  <line x1="0" y1="570" x2="430" y2="570"
+        stroke="#fff"
+        stroke-width="3"
+        stroke-dasharray="12,12"/>
+</g>
+<!-- -------------------------------------------------------- -->
+
+<g class="road">
+  <!-- ตัวถนน -->
+  <rect x="440" y="60" width="40" height="800" rx="10" fill="#b0b7bd"/>
+  
+  <!-- เส้นปะกลางถนน บวกเพิ่มอีก 20 -->
+  <line x1="460" y1="60" x2="460" y2="800"
+        stroke="#ffffff"
+        stroke-width="4"
+        stroke-dasharray="12,12"/>
+</g>
+
+<g opacity="0.9">
+  <circle cx="200" cy="200" r="8" fill="#4caf50"/>
+  <circle cx="215" cy="210" r="6" fill="#43a047"/>
+  <circle cx="185" cy="210" r="6" fill="#66bb6a"/>
+</g>
+  <!-- อาคาร -->
+  <rect id="b4" x="560" y="290" width="100" height="80" class="building important"/>
+  <rect id="b1" x="480" y="300" width="60" height="220" class="building learn"/>
+  <rect id="b2" x="565" y="430" width="90" height="90" class="building learn"/>
+  <rect id="b3" x="680" y="300" width="60" height="220" class="building learn"/>
+  <rect id="b5" x="540" y="600" width="180" height="90" class="building important"/>
+  <rect id="b6" x="480" y="160" width="70" height="130" class="building learn"/>
+  <rect id="b7" x="550" y="140" width="110" height="80" class="building learn"/>
+  <rect id="b8" x="300" y="290" width="130" height="70" class="building important"/>
+  <rect id="b9" x="140" y="290" width="130" height="70" class="building learn"/>
+  <circle id="b10" cx="370" cy="220" r="40" class="building important"/>
+  <rect id="b11" x="155" y="220" width="100" height="40" class="building sport"/>
+  <rect id="b12" x="560" y="530" width="100" height="60" class="building sport"/>
+
+  <!-- ชื่ออาคารหลัก -->
+  <text class= "label" x="610" y="330">โรงอาหารเก่า </text> 
+  <text class="label" x="510" y="400">ตึก 1</text>
+  <text class="label" x="610" y="480">ตึก 2 </text>
+  <text class="label" x="710" y="400">ตึก 3</text>
+  <text class="label" x="630" y="650">ตึก 5 (ยิม)</text>
+  <text class="label" x="510" y="240">ตึก 6</text>
+  <text class="label" x="600" y="190">ตึก 7</text>
+  <text class="label" x="360" y="330">ตึก 8</text>
+  <text class="label" x="200" y="330">ตึก 9</text>
+  <text class="label" x="370" y="230">คูหาลูกเสือ</text>
+  <text class="label" x="205" y="245">สนามฟุตบอล</text>
+  <text class="label" x="610" y="570">โดมหน้าเสาธง</text>
+  
+
+  <!-- เส้นนำทาง -->
+  <path id="route"
+        fill="none"
+        stroke="red"
+        stroke-width="1"
+        stroke-dasharray="6 6"/>
+
+  <!-- หมุดผู้ใช้ + Ping -->
+  <circle id="userMarker" r="6" fill="#ff595e" cx="-100" cy="-100"/>
+  <circle id="userPulse" r="10" fill="none" stroke="#ff595e" stroke-width="2"
+          cx="-100" cy="-100">
+    <animate attributeName="r" from="6" to="18" dur="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+
+</svg>
+</div>
+
+<script>
+/* ===== ข้อมูลอาคาร + พิกัด ===== */
+const buildings = {
+  1:{
+    name:"ตึก 1 (อาคารสุนีย์ นิมมานเหมินท์)",
+    floors:{
+      1:["1.ห้องผู้อำนวยการวิทยาลัย","2.ห้องรองผู้อำนวยการวิทยาลัย","3.ห้องงานการเงิน","4.ห้องงานบุคลากร","5.ห้องงานบัญชี","6.ห้องงานบริหารงานทั่วไป","7.ห้องประชุมสุวรรณภูมิ","8.ห้องควบคุมสารสนเทศ","9.ห้องงานประชาสัมพันธ์","10.ห้องพักครู","11.ห้องงานปกครอง"],
+      2:["1.ห้องงานทะเบียน","2.ห้องชมรมพุทธศาสนา","3.ห้องประชุมมูลนิธิฯ","4.ห้องดนตรีไทย","5.ห้องศูนย์บางนาอินเตอร์เน็ต"]
+    },
+    lat:13.675964,
+    lng:100.616162,
+    x:520,y:400
+  },
+  2:{
+    name:"ตึก 2 (อาคารรุ่งเรือง)",
+    floors:{
+      1:["ห้องศรีนห้องประชุมศรีนครินทร์"],
+      2:["ห้องเรียนหฤษฎี 2 ห้อง"],
+      3:["ห้องเรียนหฤษฎี 4 ห้องเรียนธุรกิจ"],
+      4:["ห้องเรียนหฤษฎี 4 ห้อง"]
+    },
+    lat:13.675516,
+    lng:100.616204,
+    x:600,y:480
+  },
+  3:{
+    name:"ตึก 3 (อาคารรุ่งแสง)",
+    floors:{
+      1:["1.ห้องอุปกรณ์งานอาคารสถานที่","2.ห้องชมรมอนุรักษ์ธรรมชาติและสิ่งแวดล้อม","3.ห้องพยาบาล","4.ห้องเรียนทฤษฎี 1 ห้อง","5.ห้องงานแนะแนวอาชีพและการจัดหางาน","6.ห้อง งานอาคารสถานที่","7.ห้องงานโครงการพิเศษและบริการชุมชนและห้องพักครู 1 ห้อง"],
+      2:["ห้องเรียนทฤษฎี 8 ห้อง, ห้องพักครู 2 ห้อง"],
+      3:["ห้องเรียนทฤษฎี 8 ห้อง, ห้องพักครู 2 ห้อง"],
+      4:["ห้องเรียนทฤษฎี 8 ห้อง, ห้องพักครู 2 ห้อง"]
+    },
+    lat:13.675565,
+    lng:100.616701,
+    x:710,y:400
+  },
+  4:{
+    name:"อาคารโรงอาหาร (หลังเก่า)",
+    floors:{
+      1:["อาคารโรงอาหารเก่า ปัจจุบันใช้เป็นอาคารอเนกประสงค์"]
+    },
+    lat:13.675810,
+    lng:100.616560,
+    x:600,y:340
+  },
+  5:{
+    name:"ตึก 5 อาคารชนะ รุ่งแสง (พลศึกษา)",
+    floors:{
+      1:["อาคารโรงพลศึกษา ใช้สำหรับการเรียนกีฬาในร่ม"]
+    },
+    lat:13.674959,
+    lng:100.615678,
+    x:630,y:620
+  },
+  6:{
+    name:"ตึก 6 อาคารเรียน 6",
+    floors:{
+      1:["1.ห้องงานพัสด","2.ห้องสำนักงานสมาคมศิษย์เก่าพณิชยการบางนา","3.ห้องน้ำ ชาย-หญิง"],
+      2:["1.ห้องงานสื่อการเรียนการสอน","2.ห้องเก็บอุปกรณ์","3.ห้องน้ำชาย-หญิง"],
+      3:["1.ห้องประชุมสุขุมวิท","2.ห้องรับรองวิทยากร 1 ห้อง","3.ห้องน้ำ 1 ห้อง"],
+      4:["1.ห้องอเนกประสงค์ จำนวน 1 ห้อง","2.ห้องพักครู 1 ห้อง"],
+      5:["1.ห้องเรียนเทคโนโลยีบัณฑิต 4 ห้อง"],
+      6:["1.ห้องเรียนวิชาสาขาการจัดการโลจิสติกส์","2.ห้องน้ำชาย-หญิง"]
+    },
+    lat:13.676365,
+    lng:100.616584,
+    x:510,y:250
+  },
+  7:{
+    name:"ตึก 7 อาคารเรียน 7",
+    floors:{
+      1:["1.ห้องปฏิบัติการขาย 2 ห้อง","2.และห้องน้ำนักเรียนนักศึกษาชาย-หญิง"],
+      2:["1.ห้องงานพัฒนาหลักสูตรและการสอน","2.ห้องงานวัดผลและประเมินผล","3.ห้องคณะ วิชาการตลาด","4.ห้องน้ำครูชาย-หญิง"],
+      3:["1.ห้องปฏิบัติการบัญชี 3 ห้อง","2.ห้องแผนกวิชาการบัญชี 1 ห้อง","3.ห้องปฏิบัติการ ภาษาอังกฤษ 2 ห้อง","4ห้องพักครู 1 ห้อง","5.ห้องน้ำครูชาย-หญิง"],
+      4:["1.ห้องเรียนวิชาคอมพิวเตอร์ 2 ห้อง","2.ห้องเรียนทฤษฎี 2 ห้อง","3.ห้องพักครู 1 ห้อง","4.ห้องน้ำครู 1 ห้อง"],
+      5:["1.ห้องคอมพิวเตอร์","2.ห้องคณะวิชาสัมพันธ์ธุรกิจ 1 ห้อง","3.ห้องปฏิบัติงาน สำนักงาน 2 ห้อง","4.ห้องเครื่องใช้สำนักงาน 1 ห้อง","5.ห้องเครื่องบันทึกและถอดข้อความ 1 ห้อง","6.คณะวิชาการเลขานุการ 1 ห้อง","7.ห้องน้ำครู 1 ห้อง"],
+      6:["1.ห้องพิมพ์ดีดไทย 4 ห้อง","2., ห้องเครื่องใช้สำนักงาน 1 ห้อง","3.ห้องพักครู 1 ห้อง","4.ห้องน้ำครู 1 ห้อง"]
+    },
+    lat:13.676215,
+    lng:100.616862,
+    x:575,y:190
+  },
+  8:{
+    name:"ตึก 8 อาคารเฉลิมพระเกียรติ",
+    floors:{
+      1:["เวที","ที่นั่งผู้ชม"],
+      2:["ห้องควบคุมเสียง"]
+    },
+    lat:13.676777,
+    lng:100.616041,
+    x:350,y:320
+  },
+  9:{
+    name:"ตึก 9 อาคารเรียน 9",
+    floors:{
+      1:["ห้องเรียนทั่วไป"],
+      2:["ห้องปฏิบัติการ"]
+    },
+    lat:13.677137,
+    lng:100.615595,
+    x:200,y:330
+  },
+  10:{
+    name:"คูหาลูกเสือวิสามัญ",
+    floors:{
+      1:["พื้นที่อนุสรณ์"]
+    },
+    lat:13.676957,
+    lng:100.616329,
+    x:370,y:220
+  },
+  11:{
+    name:"สนามฟุตบอล",
+    floors:{
+      1:["สนามแข่งขัน","อัฒจันทร์"]
+    },
+    lat:13.677373,
+    lng:100.615777,
+    x:210,y:240
+  },
+  12:{
+    name:"โดมหน้าเสาธง",
+    floors:{
+      1:["สนามกิจกรรม","พื้นที่ออกกำลังกาย"]
+    },
+    lat:13.675173,
+    lng:100.615885,
+    x:610,y:560
+  }
+};
+
+/* คลิกอาคาร */
+Object.keys(buildings).forEach(id=>{
+  document.getElementById('b'+id).onclick=()=>showBuilding(id);
+});
+
+/* แสดงข้อมูลอาคาร */
+function showBuilding(id){
+  clearHighlight();
+  document.getElementById('b'+id).classList.add('highlight');
+  const b=buildings[id];
+  info.innerHTML=
+   `<h3>${b.name}</h3>
+    <p>พิกัด (${b.x}, ${b.y})</p>
+    <a target="_blank"
+     href="https://www.google.com/maps/search/${encodeURIComponent(b.name)}">
+     เปิดใน Google Maps</a>`;
+}
+function clearHighlight(){
+  document.querySelectorAll('.building')
+    .forEach(e=>e.classList.remove('highlight'));
+}
+
+/* ค้นหา */
+search.oninput=()=>{
+  for(const id in buildings){
+    if(buildings[id].name.includes(search.value)){
+      showBuilding(id); break;
+    }
+  }
+};
+
+/* dropdown */
+for(const id in buildings){
+  from.innerHTML+=`<option value="${id}">${buildings[id].name}</option>`;
+  to.innerHTML+=`<option value="${id}">${buildings[id].name}</option>`;
+}
+
+/* เส้นทางโค้ง */
+function findRoute(){
+  const a=buildings[from.value];
+  const b=buildings[to.value];
+  route.setAttribute(
+    "d",`M ${a.x} ${a.y} Q 500 400 ${b.x} ${b.y}`
+  );
+}
+/*พิกัดมุมแมพ*/
+const MAP_BOUNDS = {
+  latMin: 13.675100,   // ขอบล่าง (ใต้สุด)
+  latMax: 13.677900,   // ขอบบน (เหนือสุด)
+  lngMin: 100.615000,  // ขอบซ้าย (ตะวันตก)
+  lngMax: 100.617400   // ขอบขวา (ตะวันออก)
+};
+
+function isInsideMap(lat, lng) {
+  return (
+    lat >= MAP_BOUNDS.latMin &&
+    lat <= MAP_BOUNDS.latMax &&
+    lng >= MAP_BOUNDS.lngMin &&
+    lng <= MAP_BOUNDS.lngMax
+  );
+}
+
+/* ระบุตำแหน่งผู้ใช้ (GPS → X,Y) */
+function locateMe(){
+  if(!navigator.geolocation){
+    alert("อุปกรณ์ไม่รองรับ GPS");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      if(!isInsideMap(lat,lng)){
+        info.innerHTML = "⚠️ คุณอยู่นอกพื้นที่สถานศึกษา";
+        userMarker.style.display = "none";
+        userPulse.style.display = "none";
+        return;
+      }
+
+      // จุดอ้างอิง (ใช้ตึก 1)
+      const refLat = buildings[1].lat;
+      const refLng = buildings[1].lng;
+      const refX = buildings[1].x;
+      const refY = buildings[1].y;
+
+      const gpsScale = 100000;
+
+      const x = refX + (lng - refLng) * gpsScale;
+      const y = refY - (lat - refLat) * gpsScale;
+
+      userMarker.setAttribute("cx",x);
+      userMarker.setAttribute("cy",y);
+      userPulse.setAttribute("cx",x);
+      userPulse.setAttribute("cy",y);
+
+      userMarker.style.display = "block";
+      userPulse.style.display = "block";
+
+      info.innerHTML = `
+        <h3>📍 ตำแหน่งของคุณ</h3>
+        <p>Lat ${lat.toFixed(6)}<br>Lng ${lng.toFixed(6)}</p>
+      `;
+    },
+    err=>{
+      alert("ไม่สามารถเข้าถึง GPS ได้");
+    },
+    { enableHighAccuracy:true }
+    
+  );
+}
+
+       
+/* Zoom + Drag */
+let scale=1, panX=0, panY=0, down=false, sx=0, sy=0;
+map.addEventListener('wheel',e=>{
+  e.preventDefault();
+  scale+=e.deltaY*-0.001;
+  scale=Math.min(Math.max(.5,scale),2);
+  update();
+});
+map.addEventListener('mousedown',e=>{
+  down=true; sx=e.clientX-panX; sy=e.clientY-panY;
+});
+window.addEventListener('mouseup',()=>down=false);
+window.addEventListener('mousemove',e=>{
+  if(!down) return;
+  panX=e.clientX-sx; panY=e.clientY-sy; update();
+});
+function update(){
+  map.setAttribute(
+    'transform',`translate(${panX},${panY}) scale(${scale})`
+  );
+}
+const buildingSelect = document.getElementById("buildingSelect");
+const floorSelect = document.getElementById("floorSelect");
+const roomList = document.getElementById("roomList");
+
+// โหลดรายชื่ออาคารเข้าเมนู
+for (const id in buildings) {
+  buildingSelect.innerHTML +=
+    `<option value="${id}">${buildings[id].name}</option>`;
+}
+
+function updateFloors() {
+  floorSelect.innerHTML = '<option value="">เลือกชั้น</option>';
+  roomList.innerHTML = "";
+
+  const b = buildings[buildingSelect.value];
+  if (!b) return;
+
+  // ไฮไลต์อาคารบนแผนที่
+  clearHighlight();
+  document.getElementById("b" + buildingSelect.value)?.classList.add("highlight");
+
+  for (const floor in b.floors) {
+    floorSelect.innerHTML +=
+      `<option value="${floor}">ชั้น ${floor}</option>`;
+  }
+}
+
+function showRooms() {
+  roomList.innerHTML = "";
+  const b = buildings[buildingSelect.value];
+  const f = floorSelect.value;
+  if (!b || !f) return;
+
+  let html = `<h4>${b.name} – ชั้น ${f}</h4><ul>`;
+  b.floors[f].forEach(r => {
+    html += `<li>🏫 ${r}</li>`;
+  });
+  html += "</ul>";
+  roomList.innerHTML = html;
+}
+
+</script>
+<script>
+function drawRouteToBuilding(buildingId, startX, startY){
+  const b = document.getElementById(buildingId);
+
+  const x = parseFloat(b.getAttribute("x"));
+  const y = parseFloat(b.getAttribute("y"));
+  const w = parseFloat(b.getAttribute("width"));
+  const h = parseFloat(b.getAttribute("height"));
+
+  const centerX = x + w / 2;
+  const centerY = y + h / 2;
+
+  const path = document.getElementById("route");
+  path.setAttribute(
+    "d",
+    `M ${startX} ${startY} L ${centerX} ${centerY}`
+  );
+}
+const svg = document.querySelector("svg");
+
+document.querySelectorAll(".building").forEach(b=>{
+  b.addEventListener("click", e=>{
+
+    // ล้างสถานะเก่า
+    document.querySelectorAll(".building").forEach(x=>{
+      x.classList.remove("selected");
+      x.classList.add("dim");
+    });
+
+    // เลือกตึกนี้
+    b.classList.remove("dim");
+    b.classList.add("selected");
+
+    // สร้าง ripple
+    const box = b.getBBox();
+    const cx = box.x + box.width/2;
+    const cy = box.y + box.height/2;
+
+    const ripple = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    ripple.setAttribute("class","ripple");
+    ripple.setAttribute("cx",cx);
+    ripple.setAttribute("cy",cy);
+    ripple.setAttribute("r",0);
+
+    svg.appendChild(ripple);
+
+    setTimeout(()=>ripple.remove(),800);
+  });
+});
+function toggleNight(){
+  document.body.classList.toggle("night");
+}
+/*ซุมตอนกดgps*/
+function zoomToUser(x, y, zoom = 2) {
+  const svg = document.getElementById("mapSvg");
+  const vb = svg.viewBox.baseVal;
+
+  const newWidth = vb.width / zoom;
+  const newHeight = vb.height / zoom;
+
+  vb.x = x - newWidth / 2;
+  vb.y = y - newHeight / 2;
+  vb.width = newWidth;
+  vb.height = newHeight;
+}
+zoomToUser(mapX, mapY, 2.5);
+
+</script>
+
+</body>
+</html>
